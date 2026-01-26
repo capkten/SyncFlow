@@ -1,0 +1,44 @@
+# 全局配置
+global:
+  log_level: INFO
+  database_path: ./data/sync.db
+  web_host: 0.0.0.0
+  web_port: 8888
+
+# 同步任务列表
+sync_tasks:
+  - name: "示例-项目代码同步"
+    source_path: "D:/projects/my-app"
+    target:
+      type: "ssh"               # local/ssh
+      host: "192.168.1.100"
+      port: 22
+      username: "user"
+      password: "your_password" # 或使用 ssh_key_path: "/path/to/key"
+      path: "/home/user/my-app"
+    enabled: false              # 默认不启用示例任务
+    auto_start: false
+    eol_normalize: "lf"         # lf/crlf/keep
+    exclude_patterns:
+      - "*.pyc"
+      - "__pycache__"
+      - ".git"
+      - "node_modules"
+      - ".idea"
+      - "*.log"
+      - ".DS_Store"
+      - "Thumbs.db"
+    file_extensions: []         # 为空表示同步所有类型，可指定如 [".py", ".js"]
+    
+  - name: "示例-本地数据同步"
+    source_path: "D:/data"
+    target:
+      type: "local"
+      path: "E:/backup/data"
+    enabled: false
+    auto_start: false
+    eol_normalize: "keep"       # 数据文件保持原样
+    exclude_patterns:
+      - "*.tmp"
+      - "*.cache"
+    file_extensions: []

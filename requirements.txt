@@ -1,0 +1,12 @@
+fastapi==0.115.0
+uvicorn[standard]==0.32.0
+watchdog==5.0.0
+paramiko==3.5.0
+pydantic==2.10.0
+pydantic-settings==2.6.0
+PyYAML==6.0.2
+loguru==0.7.2
+sqlalchemy==2.0.36
+aiosqlite==0.20.0
+websockets==14.1
+python-multipart==0.0.20
