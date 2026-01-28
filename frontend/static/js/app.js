@@ -227,6 +227,18 @@ const app = createApp({
                 this.loadRecentLogs();
             }
         }, 5000);
+
+        // [New] 移除 Loading 遮罩
+        this.$nextTick(() => {
+            const loader = document.getElementById('app-loader');
+            if (loader) {
+                // 延迟 800ms 以平滑过渡，并确保数据已填充
+                setTimeout(() => {
+                    loader.classList.add('fade-out');
+                    setTimeout(() => loader.remove(), 600);
+                }, 800);
+            }
+        });
     },
     beforeUnmount() {
         if (this.refreshTimer) {

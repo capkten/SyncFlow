@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tongbu Sync - 正在启动</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+            font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            color: white;
+            overflow: hidden;
+        }
+
+        .container {
+            text-align: center;
+        }
+
+        .loader {
+            width: 60px;
+            height: 60px;
+            border: 4px solid rgba(255, 255, 255, 0.1);
+            border-left-color: #3b82f6;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 20px;
+        }
+
+        @keyframes spin {
+            0% {
+                transform: rotate(0deg);
+            }
+
+            100% {
+                transform: rotate(360deg);
+            }
+        }
+
+        h1 {
+            font-size: 24px;
+            font-weight: 300;
+            margin-bottom: 10px;
+            letter-spacing: 1px;
+            background: linear-gradient(90deg, #60a5fa, #a78bfa);
+            -webkit-background-clip: text;
+            background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        p {
+            color: #94a3b8;
+            font-size: 14px;
+        }
+
+        .status {
+            margin-top: 10px;
+            font-size: 12px;
+            color: #64748b;
+            height: 20px;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <div class="loader"></div>
+        <h1>Tongbu Sync</h1>
+        <p>正在初始化同步服务...</p>
+        <div class="status" id="status-text">连接服务器中...</div>
+    </div>
+
+    <script>
+        // 不断轮询本地服务端口，检查是否就绪
+        const checkServer = async () => {
+            try {
+                // pywebview 会把端口注入到 window.pywebview.api (如果是 api 模式)
+                // 或者我们从 URL 参数获取端口，或者简单地尝试访问 API
+                // 由于跨域或者是本地文件打开，我们尝试用 fetch 访问
+                // 但 best practice 是让 pywebview 的 python 端通知 js 
+
+                // 这里我们使用 pywebview 的 API 做简单的心跳
+                // 不过更简单的逻辑是在 python 端控制跳转
+                document.getElementById('status-text').innerText = "服务启动中，请稍候...";
+            } catch (e) {
+                console.log("Checking...");
+            }
+        };
+
+        setInterval(checkServer, 1000);
+    </script>
+</body>
+
+</html>
