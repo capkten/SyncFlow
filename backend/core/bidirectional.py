@@ -482,6 +482,14 @@ class BidirectionalTaskRunner:
                 pass
         self._batch_thread = None
         
+        # 停止远程 inotify 监控器
+        for watcher in self._inotify_watchers.values():
+            try:
+                watcher.stop()
+            except Exception:
+                pass
+        self._inotify_watchers = {}
+        
         self._watchers = {}
         self._poll_threads = []
         self.is_running = False
@@ -499,20 +507,61 @@ class BidirectionalTaskRunner:
             self._cleanup_thread = threading.Thread(target=self._cleanup_loop, daemon=False)
             self._cleanup_thread.start()
 
-            # 启动 SSH 轮询线程
+            # 对于 SSH 端点，优先尝试使用 inotify 实时监控
             for side, endpoint in self.endpoints.items():
                 if endpoint.type != 'ssh':
                     continue
-                t = threading.Thread(target=self._poll_loop, args=(side, endpoint), daemon=False)
-                t.start()
-                self._poll_threads.append(t)
-                logger.info(f"远端轮询已启动: side={side}, interval={self.poll_interval}s")
+                
+                # 尝试启动 inotify 监控
+                inotify_started = False
+                if INOTIFY_AVAILABLE:
+                    try:
+                        inotify_watcher = RemoteInotifyWatcher(
+                            ssh_client=endpoint.transfer.ssh,
+                            watch_path=endpoint.root,
+                            on_change=lambda event_type, rel_path, s=side: self._on_remote_event(s, event_type, rel_path),
+                            exclude_patterns=self.exclude_patterns
+                        )
+                        if inotify_watcher.start():
+                            self._inotify_watchers[side] = inotify_watcher
+                            inotify_started = True
+                            logger.info(f"✓ 远端 inotify 监控已启动: side={side}")
+                    except Exception as e:
+                        logger.warning(f"启动远端 inotify 失败，回退到轮询模式: {e}")
+                
+                # 如果 inotify 不可用，使用轮询作为回退
+                if not inotify_started:
+                    t = threading.Thread(target=self._poll_loop, args=(side, endpoint), daemon=False)
+                    t.start()
+                    self._poll_threads.append(t)
+                    logger.info(f"远端轮询已启动: side={side}, interval={self.poll_interval}s")
 
             # 仅在首次运行（无任何状态）时进行基线同步，避免每次启动都全量遍历导致“卡住/无响应”
             if not self._state_cache and not self._stop_event.is_set():
                 self._initial_sync()
         except Exception as e:
             logger.error(f"双向任务初始化失败: {e}")
+
+    def _on_remote_event(self, side: str, event_type: str, rel_path: str):
+        """
+        处理远程 inotify 事件
+        """
+        endpoint = self.endpoints.get(side)
+        if not endpoint:
+            return
+        
+        if self._is_suppressed(side, rel_path):
+            return
+        
+        try:
+            if event_type == 'deleted':
+                self._handle_meta_change(side, rel_path, None, deleted=True, seen_at=datetime.now(), endpoint=endpoint)
+            else:
+                meta = endpoint.get_meta(rel_path)
+                if meta:
+                    self._handle_meta_change(side, rel_path, meta, deleted=False, seen_at=datetime.now(), endpoint=endpoint, hash_budget=None)
+        except Exception as e:
+            logger.error(f"处理远端 inotify 事件失败: side={side}, type={event_type}, path={rel_path} - {e}")
 
     def _poll_loop(self, side: str, endpoint: SshEndpoint):
         while not self._stop_event.is_set():
