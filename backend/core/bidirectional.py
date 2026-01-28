@@ -288,7 +288,7 @@ class BidirectionalTaskRunner:
         self.exclude_patterns = task.exclude_patterns or []
         self.file_extensions = task.file_extensions or []
         self.eol_normalize = task.eol_normalize or 'keep'
-        self.poll_interval = settings.poll_interval_seconds if settings and settings.poll_interval_seconds else 5
+        self.poll_interval = settings.poll_interval_seconds if settings and settings.poll_interval_seconds else 1.5  # 默认 1.5 秒
         self.trash_dir = settings.trash_dir if settings and settings.trash_dir else '.tongbu_trash'
         self.backup_dir = settings.backup_dir if settings and settings.backup_dir else '.tongbu_backup'
 
@@ -355,6 +355,9 @@ class BidirectionalTaskRunner:
         
         # 远程 inotify 监控器
         self._inotify_watchers = {}
+        
+        # 同步状态跟踪（避免轮询和同步冲突）
+        self._syncing = threading.Event()  # 标记是否正在同步
 
     def _is_suppressed(self, side: str, rel_path: str) -> bool:
         ts = self._suppress.get(side, {}).get(rel_path)
@@ -564,8 +567,14 @@ class BidirectionalTaskRunner:
             logger.error(f"处理远端 inotify 事件失败: side={side}, type={event_type}, path={rel_path} - {e}")
 
     def _poll_loop(self, side: str, endpoint: SshEndpoint):
+        """轮询循环，智能避开同步进行时的重复检测"""
         while not self._stop_event.is_set():
             try:
+                # 如果正在同步，等待同步完成后再轮询
+                if self._syncing.is_set():
+                    self._stop_event.wait(0.5)
+                    continue
+                
                 if self._init_done.is_set():
                     start = time.time()
                     scanned, missing = self._scan_endpoint(side, endpoint)
@@ -833,29 +842,36 @@ class BidirectionalTaskRunner:
             if not sync_tasks:
                 continue
             
-            logger.info(f"批量同步开始: {len(sync_tasks)} 个文件")
-            start_time = time.time()
+            # 标记正在同步，暂停轮询
+            self._syncing.set()
             
-            # 并行执行同步（限制并发数）
-            with ThreadPoolExecutor(max_workers=self._batch_max_parallel) as executor:
-                futures = {
-                    executor.submit(self._sync_side, task['winner'], task['loser'], task['rel_path']): task
-                    for task in sync_tasks
-                }
+            try:
+                logger.info(f"批量同步开始: {len(sync_tasks)} 个文件")
+                start_time = time.time()
                 
-                completed = 0
-                failed = 0
-                for future in as_completed(futures):
-                    try:
-                        future.result()
-                        completed += 1
-                    except Exception as e:
-                        failed += 1
-                        task = futures[future]
-                        logger.error(f"批量同步失败: {task['rel_path']} - {e}")
-            
-            elapsed = time.time() - start_time
-            logger.info(f"批量同步完成: 成功 {completed}, 失败 {failed}, 耗时 {elapsed:.2f}s")
+                # 并行执行同步（限制并发数）
+                with ThreadPoolExecutor(max_workers=self._batch_max_parallel) as executor:
+                    futures = {
+                        executor.submit(self._sync_side, task['winner'], task['loser'], task['rel_path']): task
+                        for task in sync_tasks
+                    }
+                    
+                    completed = 0
+                    failed = 0
+                    for future in as_completed(futures):
+                        try:
+                            future.result()
+                            completed += 1
+                        except Exception as e:
+                            failed += 1
+                            task = futures[future]
+                            logger.error(f"批量同步失败: {task['rel_path']} - {e}")
+                
+                elapsed = time.time() - start_time
+                logger.info(f"批量同步完成: 成功 {completed}, 失败 {failed}, 耗时 {elapsed:.2f}s")
+            finally:
+                # 同步完成，恢复轮询
+                self._syncing.clear()
     
     def _prepare_sync_task(self, rel_path: str) -> Optional[Dict]:
         """

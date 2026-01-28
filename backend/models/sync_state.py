@@ -13,7 +13,7 @@ class SyncTaskSetting(Base):
 
     task_id = Column(Integer, ForeignKey("sync_tasks.id"), primary_key=True)
     mode = Column(String(20), default="one_way")
-    poll_interval_seconds = Column(Integer, default=5)
+    poll_interval_seconds = Column(Integer, default=2)  # 默认 2 秒
     trash_dir = Column(String(100), default=".tongbu_trash")
     backup_dir = Column(String(100), default=".tongbu_backup")
     trash_retention_days = Column(Integer, default=7)
