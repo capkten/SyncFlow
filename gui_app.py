@@ -127,7 +127,7 @@ def setup_tray():
         pystray.MenuItem("退出", quit_app)
     )
     
-    tray_icon = pystray.Icon("TongbuSync", image, "双向文件同步助手", menu)
+    tray_icon = pystray.Icon("SyncFlow", image, "SyncFlow - 双向文件同步助手", menu)
     tray_icon.run()
 
 def main():
@@ -170,7 +170,7 @@ def main():
 
     # 4. 创建窗口
     window = webview.create_window(
-        title="Tongbu - 双向文件同步助手",
+        title="SyncFlow - 双向文件同步助手",
         url=loading_url, # 初始显示 Loading
         width=1200,
         height=800,

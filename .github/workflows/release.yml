@@ -1,0 +1,47 @@
+name: Build and Release Windows App
+
+on:
+  push:
+    tags:
+      - 'v*' # 当推送 v 开头的标签时触发，例如 v1.0.0
+
+permissions:
+  contents: write
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.10'
+        cache: 'pip'
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install pyinstaller pywebview pystray Pillow
+
+    - name: Build with PyInstaller
+      run: |
+        python -m PyInstaller --clean -y SyncFlow.spec
+
+    - name: Zip the build
+      run: |
+        Compress-Archive -Path dist\SyncFlow\* -DestinationPath SyncFlow-Windows.zip
+
+    - name: Create Release and Upload Asset
+      uses: softprops/action-gh-release@v1
+      with:
+        files: SyncFlow-Windows.zip
+        draft: false
+        prerelease: false
+        generate_release_notes: true
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
