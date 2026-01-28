@@ -4,6 +4,9 @@ global:
   database_path: ./data/sync.db
   web_host: 0.0.0.0
   web_port: 8888
+  api_token: "change-me"          # API 访问令牌（空则不启用认证）
+  ssh_host_key_policy: "reject"   # auto/reject/warning
+  ssh_known_hosts_path: "./data/known_hosts"
 
 # 同步任务列表
 sync_tasks:

@@ -133,6 +133,9 @@ class FileWatcher:
         )
         
         self.observer = Observer()
+        # watchdog 的 Observer/Emitter 线程在极端情况下可能无法及时退出。
+        # 设为 daemon，避免阻塞 FastAPI/Uvicorn 进程退出。
+        self.observer.daemon = True
         self.is_running = False
         
     def start(self):
@@ -156,7 +159,10 @@ class FileWatcher:
             return
         
         self.observer.stop()
-        self.observer.join()
+        # 避免 join 无限阻塞导致 Ctrl+C 无法退出
+        self.observer.join(timeout=5)
+        if self.observer.is_alive():
+            logger.warning(f"文件监控线程未能在超时内退出: {self.watch_path}")
         self.is_running = False
         logger.info(f"停止监控目录: {self.watch_path}")
     

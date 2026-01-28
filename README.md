@@ -39,6 +39,9 @@ cp config.example.yaml config.yaml
 global:
   log_level: INFO
   web_port: 8888
+  api_token: "change-me"        # 可选：启用 API 认证
+  ssh_host_key_policy: "reject" # auto/reject/warning
+  ssh_known_hosts_path: "./data/known_hosts"
 
 sync_tasks:
   - name: "我的项目同步"
@@ -99,6 +102,12 @@ exclude_patterns:
   - ".git"            # 排除 .git 目录
   - "*.log"           # 排除日志文件
 ```
+
+### WebSocket 实时推送 ⭐
+
+- `ws://<host>/ws/logs`：实时日志推送
+- `ws://<host>/ws/task-status`：任务状态推送
+- 若启用 `api_token`，需在请求头 `Authorization: Bearer <token>` 或 WS 查询参数 `?token=<token>`
 
 ## 🛠️ 技术栈
 

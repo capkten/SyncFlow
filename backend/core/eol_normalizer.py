@@ -28,6 +28,17 @@ TEXT_EXTENSIONS = {
     '.gitignore', '.gitattributes', '.editorconfig', '.env'
 }
 
+# 常见二进制文件扩展名（用于避免启发式误判）
+BINARY_EXTENSIONS = {
+    '.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp', '.ico',
+    '.pdf',
+    '.zip', '.7z', '.rar', '.tar', '.gz', '.bz2', '.xz',
+    '.exe', '.dll', '.so', '.dylib',
+    '.whl', '.jar',
+    '.mp3', '.wav', '.flac', '.mp4', '.mkv', '.avi', '.mov',
+    '.woff', '.woff2', '.ttf', '.otf',
+}
+
 EOLType = Literal['lf', 'crlf', 'keep']
 
 
@@ -49,6 +60,8 @@ def is_text_file(file_path: str | Path) -> bool:
     
     # 检查扩展名
     ext = file_path.suffix.lower()
+    if ext in BINARY_EXTENSIONS:
+        return False
     if ext in TEXT_EXTENSIONS:
         return True
     

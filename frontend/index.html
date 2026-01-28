@@ -1,0 +1,624 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>文件同步助手 - 管理界面</title>
+    <meta name="description" content="跨平台文件实时同步工具 - Windows/Linux 文件同步管理">
+
+    <!-- Element Plus CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/element-plus/dist/index.css">
+
+    <!-- 自定义样式 -->
+    <link rel="stylesheet" href="/static/css/style.css?v=2.0.0">
+
+
+
+    <style>
+        /* 强制修复布局问题的内联样式 */
+        html,
+        body,
+        #app {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+        }
+
+        .app-container {
+            width: 100vw;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .main-container {
+            display: flex;
+            flex: 1;
+            width: 100%;
+            overflow: hidden;
+        }
+
+        .app-aside {
+            height: 100%;
+            width: 200px;
+            flex-shrink: 0;
+            overflow-y: auto;
+        }
+
+        .app-main {
+            flex: 1;
+            width: 0;
+            min-width: 0;
+            height: 100%;
+            overflow: auto;
+            padding: 20px;
+            box-sizing: border-box;
+            background-color: #f5f7fa;
+        }
+
+        /* 确保内容容器撑满 */
+        .dashboard,
+        .tasks,
+        .logs,
+        .settings {
+            width: 100%;
+        }
+
+        /* 表格容器允许水平滚动 */
+        .content-card {
+            overflow-x: auto;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="app">
+        <div class="app-container">
+            <!-- 顶部导航栏 -->
+            <div class="app-header">
+                <div class="header-content">
+                    <h1>📁 文件同步助手</h1>
+                    <div class="header-stats">
+                        <el-tag type="success">运行中: {{ runningCount }}</el-tag>
+                        <el-tag type="info">总任务: {{ tasks.length }}</el-tag>
+                        <el-tag :type="wsStatusType">{{ wsStatusText }}</el-tag>
+                        <el-text size="small" type="info">{{ wsHeartbeatText }}</el-text>
+                        <el-text v-if="wsReconnectHint" size="small" type="warning">{{ wsReconnectHint }}</el-text>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 主内容区 -->
+            <div class="main-container">
+                <!-- 侧边栏 -->
+                <div class="app-aside">
+                    <el-menu :default-active="activeMenu" @select="handleMenuSelect">
+                        <el-menu-item index="dashboard">
+                            <el-icon>
+                                <Odometer />
+                            </el-icon>
+                            <span>仪表盘</span>
+                        </el-menu-item>
+                        <el-menu-item index="tasks">
+                            <el-icon>
+                                <List />
+                            </el-icon>
+                            <span>任务管理</span>
+                        </el-menu-item>
+                        <el-menu-item index="logs">
+                            <el-icon>
+                                <Document />
+                            </el-icon>
+                            <span>同步日志</span>
+                        </el-menu-item>
+                        <el-menu-item index="settings">
+                            <el-icon>
+                                <Setting />
+                            </el-icon>
+                            <span>设置</span>
+                        </el-menu-item>
+                    </el-menu>
+                </div>
+
+                <!-- 内容区 -->
+                <div class="app-main">
+                    <!-- 仪表盘 -->
+                    <div v-if="activeMenu === 'dashboard'" class="dashboard">
+                        <h2>📊 仪表盘</h2>
+
+                        <el-row :gutter="20">
+                            <el-col :span="6">
+                                <el-card class="stat-card">
+                                    <div class="stat-number">{{ tasks.length }}</div>
+                                    <div class="stat-label">总任务数</div>
+                                </el-card>
+                            </el-col>
+                            <el-col :span="6">
+                                <el-card class="stat-card success">
+                                    <div class="stat-number">{{ runningCount }}</div>
+                                    <div class="stat-label">运行中</div>
+                                </el-card>
+                            </el-col>
+                            <el-col :span="6">
+                                <el-card class="stat-card info">
+                                    <div class="stat-number">{{ logStats.success || 0 }}</div>
+                                    <div class="stat-label">成功同步</div>
+                                </el-card>
+                            </el-col>
+                            <el-col :span="6">
+                                <el-card class="stat-card danger">
+                                    <div class="stat-number">{{ logStats.failed || 0 }}</div>
+                                    <div class="stat-label">同步失败</div>
+                                </el-card>
+                            </el-col>
+                        </el-row>
+
+                        <el-card class="recent-logs-card">
+                            <template #header>
+                                <div class="card-header">
+                                    <span>📋 最近同步记录</span>
+                                    <el-button type="primary" size="small" @click="activeMenu = 'logs'">查看全部</el-button>
+                                </div>
+                            </template>
+                            <!-- 自定义表格 -->
+                            <div class="simple-table logs-table">
+                                <div class="simple-table-header">
+                                    <div class="log-col-event">事件</div>
+                                    <div class="log-col-path">文件路径</div>
+                                    <div class="log-col-status">状态</div>
+                                    <div class="log-col-time">时间</div>
+                                </div>
+                                <div v-if="recentLogs.length === 0" class="simple-table-empty">
+                                    暂无同步记录
+                                </div>
+                                <div v-for="log in recentLogs" :key="log.id" class="simple-table-row">
+                                    <div class="log-col-event">
+                                        <el-tag :type="getEventTypeTag(log.event_type)" size="small">
+                                            {{ getEventTypeName(log.event_type) }}
+                                        </el-tag>
+                                    </div>
+                                    <div class="log-col-path" :title="log.file_path">{{ log.file_path }}</div>
+                                    <div class="log-col-status">
+                                        <el-tag :type="log.status === 'success' ? 'success' : 'danger'" size="small">
+                                            {{ log.status === 'success' ? '成功' : '失败' }}
+                                        </el-tag>
+                                    </div>
+                                    <div class="log-col-time">{{ formatTime(log.sync_time) }}</div>
+                                </div>
+                            </div>
+                        </el-card>
+                    </div>
+
+                    <!-- 任务管理 -->
+                    <div v-if="activeMenu === 'tasks'" class="tasks">
+                        <div class="page-header">
+                            <h2>📁 任务管理</h2>
+                            <div class="page-actions">
+                                <el-button @click="loadTasks">
+                                    <el-icon>
+                                        <Refresh />
+                                    </el-icon> 刷新
+                                </el-button>
+                                <el-button type="primary" @click="showCreateDialog">
+                                    <el-icon>
+                                        <Plus />
+                                    </el-icon> 新建任务
+                                </el-button>
+                            </div>
+                        </div>
+
+                        <el-card class="content-card" shadow="never">
+                            <div class="table-toolbar">
+                                <el-input v-model="taskFilters.query" clearable placeholder="搜索：任务名 / 源目录 / 目标路径"
+                                    style="max-width: 360px" @clear="resetTasksPage" @input="resetTasksPage">
+                                    <template #prefix>
+                                        <el-icon>
+                                            <Search />
+                                        </el-icon>
+                                    </template>
+                                </el-input>
+
+                                <el-select v-model="taskFilters.targetType" clearable placeholder="类型"
+                                    style="width: 100px" @change="resetTasksPage"
+                                    @clear="taskFilters.targetType = ''; resetTasksPage()">
+                                    <el-option label="本地" value="local" />
+                                    <el-option label="SSH" value="ssh" />
+                                </el-select>
+
+                                <el-select v-model="taskFilters.running" clearable placeholder="状态" style="width: 100px"
+                                    @change="resetTasksPage" @clear="taskFilters.running = null; resetTasksPage()">
+                                    <el-option label="运行中" :value="true" />
+                                    <el-option label="已停止" :value="false" />
+                                </el-select>
+                            </div>
+
+                            <!-- 使用简单的div表格布局 -->
+                            <div class="simple-table">
+                                <div class="simple-table-header">
+                                    <div class="col-name">任务名称</div>
+                                    <div class="col-mode">模式</div>
+                                    <div class="col-source">源目录</div>
+                                    <div class="col-target">目标</div>
+                                    <div class="col-path">目标路径</div>
+                                    <div class="col-status">状态</div>
+                                    <div class="col-actions">操作</div>
+                                </div>
+                                <div v-if="pagedTasks.length === 0" class="simple-table-empty">
+                                    暂无任务，请点击右上角「新建任务」创建
+                                </div>
+                                <div v-for="task in pagedTasks" :key="task.id" class="simple-table-row">
+                                    <div class="col-name" :title="task.name">{{ task.name }}</div>
+                                    <div class="col-mode">
+                                        <el-tag :type="task.mode === 'two_way' ? 'success' : 'info'" size="small">
+                                            {{ task.mode === 'two_way' ? '双向' : '单向' }}
+                                        </el-tag>
+                                    </div>
+                                    <div class="col-source" :title="task.source_path">{{ task.source_path }}</div>
+                                    <div class="col-target" :title="getTargetSummary(task)">{{ getTargetSummary(task) }}
+                                    </div>
+                                    <div class="col-path" :title="task.target_path">{{ task.target_path }}</div>
+                                    <div class="col-status">
+                                        <el-tag :type="task.is_running ? 'success' : 'info'" size="small">
+                                            {{ task.is_running ? '运行中' : '已停止' }}
+                                        </el-tag>
+                                    </div>
+                                    <div class="col-actions">
+                                        <el-button v-if="!task.is_running" type="success" size="small"
+                                            @click="startTask(task.id)">启动</el-button>
+                                        <el-button v-else type="warning" size="small"
+                                            @click="stopTask(task.id)">停止</el-button>
+                                        <el-button type="primary" size="small"
+                                            @click="syncTaskAll(task.id)">全量</el-button>
+                                        <el-button size="small" @click="openTaskDetail(task)">详情</el-button>
+                                        <el-button size="small" @click="editTask(task)">编辑</el-button>
+                                        <el-button type="danger" size="small"
+                                            @click="deleteTask(task.id)">删除</el-button>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="table-footer">
+                                <el-pagination :current-page="tasksPage" :page-size="tasksPageSize"
+                                    :page-sizes="[10, 20, 50, 100]" :total="filteredTasks.length"
+                                    layout="total, sizes, prev, pager, next" @current-change="handleTasksPageChange"
+                                    @size-change="handleTasksPageSizeChange" />
+                            </div>
+                        </el-card>
+                    </div>
+
+                    <!-- 同步日志 -->
+                    <div v-if="activeMenu === 'logs'" class="logs">
+                        <div class="page-header">
+                            <h2>📄 同步日志</h2>
+                            <div class="page-actions">
+                                <el-button @click="loadLogs">
+                                    <el-icon>
+                                        <Refresh />
+                                    </el-icon> 刷新
+                                </el-button>
+                            </div>
+                        </div>
+
+                        <el-card class="content-card" shadow="never">
+                            <div class="table-toolbar">
+                                <el-select v-model="selectedLogTaskId" filterable clearable placeholder="选择任务查看日志"
+                                    style="min-width: 360px" @change="handleLogTaskChange"
+                                    @clear="selectedLogTaskId = null; logs = []">
+                                    <el-option v-for="t in tasks" :key="t.id" :label="getTaskOptionLabel(t)"
+                                        :value="t.id" />
+                                </el-select>
+
+                                <el-select v-model="logFilters.status" clearable placeholder="状态" style="width: 160px"
+                                    @clear="logFilters.status = ''">
+                                    <el-option label="成功" value="success" />
+                                    <el-option label="失败" value="failed" />
+                                    <el-option label="跳过" value="skipped" />
+                                </el-select>
+
+                                <el-text type="info" size="small" v-if="selectedLogTask">
+                                    当前：{{ selectedLogTask.name }}（{{ selectedLogTask.source_path }} → {{
+                                    selectedLogTask.target_path }}）
+                                </el-text>
+                                <el-text type="info" size="small" v-if="selectedLogTask">
+                                    仅显示最近 {{ logsLimit }} 条
+                                </el-text>
+                            </div>
+
+                            <!-- 同步日志自定义表格 -->
+                            <div class="simple-table logs-table" style="max-height: 600px; overflow-y: auto;">
+                                <div class="simple-table-header">
+                                    <div class="log-col-event">事件</div>
+                                    <div class="log-col-path">文件路径</div>
+                                    <div class="log-col-status">状态</div>
+                                    <div class="log-col-error">错误信息</div>
+                                    <div class="log-col-time">时间</div>
+                                </div>
+                                <div v-if="!selectedLogTaskId" class="simple-table-empty">
+                                    请选择任务查看日志
+                                </div>
+                                <div v-else-if="filteredLogs.length === 0" class="simple-table-empty">
+                                    暂无日志
+                                </div>
+                                <div v-for="log in filteredLogs" :key="log.id" class="simple-table-row">
+                                    <div class="log-col-event">
+                                        <el-tag :type="getEventTypeTag(log.event_type)" size="small">
+                                            {{ getEventTypeName(log.event_type) }}
+                                        </el-tag>
+                                    </div>
+                                    <div class="log-col-path" :title="log.file_path">{{ log.file_path }}</div>
+                                    <div class="log-col-status">
+                                        <el-tag
+                                            :type="log.status === 'success' ? 'success' : (log.status === 'skipped' ? 'info' : 'danger')"
+                                            size="small">
+                                            {{ log.status === 'success' ? '成功' : (log.status === 'skipped' ? '跳过' :
+                                            '失败') }}
+                                        </el-tag>
+                                    </div>
+                                    <div class="log-col-error" :title="log.error_message">{{ log.error_message || '-' }}
+                                    </div>
+                                    <div class="log-col-time">{{ formatTime(log.sync_time) }}</div>
+                                </div>
+                            </div>
+                        </el-card>
+                    </div>
+
+                    <!-- 设置 -->
+                    <div v-if="activeMenu === 'settings'" class="settings">
+                        <h2>⚙️ 设置</h2>
+                        <el-card style="margin-bottom: 16px">
+                            <template #header>
+                                <span>访问认证</span>
+                            </template>
+                            <el-form label-width="120px">
+                                <el-form-item label="API Token">
+                                    <el-input v-model="authTokenInput" type="password" placeholder="仅保存到浏览器本地"
+                                        show-password />
+                                </el-form-item>
+                                <el-form-item>
+                                    <el-button type="primary" @click="saveAuthToken">保存令牌</el-button>
+                                    <el-text type="info" size="small">令牌不会写入配置文件</el-text>
+                                </el-form-item>
+                            </el-form>
+                        </el-card>
+                        <el-card>
+                            <template #header>
+                                <span>全局配置</span>
+                            </template>
+                            <el-form :model="globalConfig" label-width="120px">
+                                <el-form-item label="日志级别">
+                                    <el-select v-model="globalConfig.log_level">
+                                        <el-option label="DEBUG" value="DEBUG" />
+                                        <el-option label="INFO" value="INFO" />
+                                        <el-option label="WARNING" value="WARNING" />
+                                        <el-option label="ERROR" value="ERROR" />
+                                    </el-select>
+                                </el-form-item>
+                                <el-form-item label="Web 端口">
+                                    <el-input-number v-model="globalConfig.web_port" :min="1024" :max="65535" />
+                                </el-form-item>
+                                <el-form-item label="SSH 主机策略">
+                                    <el-select v-model="globalConfig.ssh_host_key_policy">
+                                        <el-option label="拒绝未知" value="reject" />
+                                        <el-option label="自动接受" value="auto" />
+                                        <el-option label="警告模式" value="warning" />
+                                    </el-select>
+                                </el-form-item>
+                                <el-form-item label="known_hosts">
+                                    <el-input v-model="globalConfig.ssh_known_hosts_path" />
+                                </el-form-item>
+                                <el-form-item>
+                                    <el-button type="primary" @click="saveGlobalConfig">保存配置</el-button>
+                                    <el-text type="info" size="small">注意：修改端口后需要重启服务</el-text>
+                                </el-form-item>
+                            </el-form>
+                        </el-card>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 创建/编辑任务对话框 -->
+        <el-dialog v-model="taskDialogVisible" :title="isEditMode ? '编辑任务' : '新建任务'" width="600px">
+            <el-form :model="taskForm" label-width="120px">
+                <el-form-item label="任务名称" required>
+                    <el-input v-model="taskForm.name" placeholder="例如：项目代码同步" />
+                </el-form-item>
+                <el-form-item label="同步模式">
+                    <el-radio-group v-model="taskForm.mode" @change="handleModeChange">
+                        <el-radio value="one_way">单向</el-radio>
+                        <el-radio value="two_way">双向</el-radio>
+                    </el-radio-group>
+                </el-form-item>
+
+                <template v-if="taskForm.mode === 'one_way'">
+                    <el-form-item label="源目录" required>
+                        <el-input v-model="taskForm.source_path" placeholder="D:/projects/my-app" />
+                    </el-form-item>
+                    <el-form-item label="目标类型" required>
+                        <el-radio-group v-model="taskForm.target_type">
+                            <el-radio value="local">本地</el-radio>
+                            <el-radio value="ssh">SSH 远程</el-radio>
+                        </el-radio-group>
+                    </el-form-item>
+
+                    <template v-if="taskForm.target_type === 'ssh'">
+                        <el-form-item label="主机地址" required>
+                            <el-input v-model="taskForm.target_host" placeholder="192.168.1.100" />
+                        </el-form-item>
+                        <el-form-item label="端口">
+                            <el-input-number v-model="taskForm.target_port" :min="1" :max="65535" />
+                        </el-form-item>
+                        <el-form-item label="用户名" required>
+                            <el-input v-model="taskForm.target_username" placeholder="user" />
+                        </el-form-item>
+                        <el-form-item label="密码">
+                            <el-input v-model="taskForm.target_password" type="password" placeholder="留空使用 SSH 密钥" />
+                        </el-form-item>
+                        <el-form-item label="SSH 密钥路径">
+                            <el-input v-model="taskForm.target_ssh_key_path" placeholder="/path/to/id_rsa" />
+                        </el-form-item>
+                    </template>
+
+                    <el-form-item label="目标路径" required>
+                        <el-input v-model="taskForm.target_path" placeholder="E:/backup 或 /home/user/my-app" />
+                    </el-form-item>
+                </template>
+
+                <template v-else>
+                    <el-divider>端点 A</el-divider>
+                    <el-form-item label="端点A类型" required>
+                        <el-radio-group v-model="taskForm.endpoint_a.type">
+                            <el-radio value="local">本地</el-radio>
+                            <el-radio value="ssh">SSH 远程</el-radio>
+                        </el-radio-group>
+                    </el-form-item>
+                    <el-form-item label="端点A路径" required>
+                        <el-input v-model="taskForm.endpoint_a.path" placeholder="D:/projects/my-app" />
+                    </el-form-item>
+                    <template v-if="taskForm.endpoint_a.type === 'ssh'">
+                        <el-form-item label="主机地址" required>
+                            <el-input v-model="taskForm.endpoint_a.host" placeholder="192.168.1.100" />
+                        </el-form-item>
+                        <el-form-item label="端口">
+                            <el-input-number v-model="taskForm.endpoint_a.port" :min="1" :max="65535" />
+                        </el-form-item>
+                        <el-form-item label="用户名" required>
+                            <el-input v-model="taskForm.endpoint_a.username" placeholder="user" />
+                        </el-form-item>
+                        <el-form-item label="密码">
+                            <el-input v-model="taskForm.endpoint_a.password" type="password"
+                                placeholder="留空使用 SSH 密钥" />
+                        </el-form-item>
+                        <el-form-item label="SSH 密钥路径">
+                            <el-input v-model="taskForm.endpoint_a.ssh_key_path" placeholder="/path/to/id_rsa" />
+                        </el-form-item>
+                    </template>
+
+                    <el-divider>端点 B</el-divider>
+                    <el-form-item label="端点B类型" required>
+                        <el-radio-group v-model="taskForm.endpoint_b.type">
+                            <el-radio value="local">本地</el-radio>
+                            <el-radio value="ssh">SSH 远程</el-radio>
+                        </el-radio-group>
+                    </el-form-item>
+                    <el-form-item label="端点B路径" required>
+                        <el-input v-model="taskForm.endpoint_b.path" placeholder="E:/backup 或 /home/user/my-app" />
+                    </el-form-item>
+                    <template v-if="taskForm.endpoint_b.type === 'ssh'">
+                        <el-form-item label="主机地址" required>
+                            <el-input v-model="taskForm.endpoint_b.host" placeholder="192.168.1.100" />
+                        </el-form-item>
+                        <el-form-item label="端口">
+                            <el-input-number v-model="taskForm.endpoint_b.port" :min="1" :max="65535" />
+                        </el-form-item>
+                        <el-form-item label="用户名" required>
+                            <el-input v-model="taskForm.endpoint_b.username" placeholder="user" />
+                        </el-form-item>
+                        <el-form-item label="密码">
+                            <el-input v-model="taskForm.endpoint_b.password" type="password"
+                                placeholder="留空使用 SSH 密钥" />
+                        </el-form-item>
+                        <el-form-item label="SSH 密钥路径">
+                            <el-input v-model="taskForm.endpoint_b.ssh_key_path" placeholder="/path/to/id_rsa" />
+                        </el-form-item>
+                    </template>
+                </template>
+                <el-form-item label="换行符处理">
+                    <el-radio-group v-model="taskForm.eol_normalize">
+                        <el-radio value="lf">LF (Unix)</el-radio>
+                        <el-radio value="crlf">CRLF (Windows)</el-radio>
+                        <el-radio value="keep">保持原样</el-radio>
+                    </el-radio-group>
+                </el-form-item>
+                <el-form-item label="排除规则">
+                    <el-input v-model="excludePatternsText" type="textarea" :rows="3"
+                        placeholder="每行一个规则，例如：&#10;*.pyc&#10;__pycache__&#10;.git" />
+                </el-form-item>
+                <el-form-item label="启用任务">
+                    <el-switch v-model="taskForm.enabled" />
+                </el-form-item>
+                <el-form-item label="自动启动">
+                    <el-switch v-model="taskForm.auto_start" />
+                </el-form-item>
+                <el-form-item label="SSH 轮询间隔(秒)"
+                    v-if="taskForm.mode === 'two_way' && (taskForm.endpoint_a.type === 'ssh' || taskForm.endpoint_b.type === 'ssh')">
+                    <el-input-number v-model="taskForm.poll_interval_seconds" :min="1" :max="300" />
+                    <el-text type="info" size="small" style="margin-left: 8px">仅对 SSH 端有效</el-text>
+                </el-form-item>
+                <el-form-item label="回收站保留(天)">
+                    <el-input-number v-model="taskForm.trash_retention_days" :min="0" :max="3650" />
+                    <el-text type="info" size="small" style="margin-left: 8px">0 表示不清理</el-text>
+                </el-form-item>
+                <el-form-item label="备份保留(天)">
+                    <el-input-number v-model="taskForm.backup_retention_days" :min="0" :max="3650" />
+                    <el-text type="info" size="small" style="margin-left: 8px">0 表示不清理</el-text>
+                </el-form-item>
+            </el-form>
+            <template #footer>
+                <el-button @click="taskDialogVisible = false">取消</el-button>
+                <el-button type="primary" @click="saveTask">保存</el-button>
+            </template>
+        </el-dialog>
+
+        <!-- 任务详情 -->
+        <el-drawer v-model="taskDetailVisible" title="任务详情" size="520px">
+            <template v-if="taskDetail">
+                <el-descriptions :column="1" border>
+                    <el-descriptions-item label="任务名称">{{ taskDetail.name || '-' }}</el-descriptions-item>
+                    <el-descriptions-item label="同步模式">
+                        {{ taskDetail.mode === 'two_way' ? '双向' : '单向' }}
+                    </el-descriptions-item>
+                    <el-descriptions-item label="源目录">{{ taskDetail.source_path || '-' }}</el-descriptions-item>
+                    <el-descriptions-item label="目标类型">{{ taskDetail.target_type || '-' }}</el-descriptions-item>
+                    <el-descriptions-item label="目标">{{ getTargetSummary(taskDetail) }}</el-descriptions-item>
+                    <el-descriptions-item label="目标路径">{{ taskDetail.target_path || '-' }}</el-descriptions-item>
+                    <el-descriptions-item v-if="taskDetail.endpoints" label="端点A">
+                        {{ getEndpointSummary(taskDetail, 'a') }}
+                    </el-descriptions-item>
+                    <el-descriptions-item v-if="taskDetail.endpoints" label="端点B">
+                        {{ getEndpointSummary(taskDetail, 'b') }}
+                    </el-descriptions-item>
+                    <el-descriptions-item label="换行符">{{ getEolLabel(taskDetail.eol_normalize) }}</el-descriptions-item>
+                    <el-descriptions-item label="启用">{{ taskDetail.enabled ? '是' : '否' }}</el-descriptions-item>
+                    <el-descriptions-item label="自动启动">{{ taskDetail.auto_start ? '是' : '否' }}</el-descriptions-item>
+                    <el-descriptions-item label="回收站保留">
+                        {{ taskDetail.trash_retention_days ?? 7 }} 天
+                    </el-descriptions-item>
+                    <el-descriptions-item v-if="taskDetail.mode === 'two_way'" label="SSH 轮询间隔">
+                        {{ taskDetail.poll_interval_seconds ?? 5 }} 秒
+                    </el-descriptions-item>
+                    <el-descriptions-item label="备份保留">
+                        {{ taskDetail.backup_retention_days ?? 7 }} 天
+                    </el-descriptions-item>
+                    <el-descriptions-item label="排除规则">
+                        <el-text v-if="(taskDetail.exclude_patterns || []).length" style="white-space: pre-wrap">
+                            {{ (taskDetail.exclude_patterns || []).join('\n') }}
+                        </el-text>
+                        <el-text v-else type="info">-</el-text>
+                    </el-descriptions-item>
+                    <el-descriptions-item label="同步文件类型">
+                        <el-text v-if="(taskDetail.file_extensions || []).length">
+                            {{ (taskDetail.file_extensions || []).join(', ') }}
+                        </el-text>
+                        <el-text v-else type="info">全部</el-text>
+                    </el-descriptions-item>
+                </el-descriptions>
+            </template>
+        </el-drawer>
+    </div>
+
+    <!-- Vue 3 -->
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <!-- Element Plus -->
+    <script src="https://unpkg.com/element-plus"></script>
+    <!-- Element Plus Icons -->
+    <script src="https://unpkg.com/@element-plus/icons-vue/dist/index.iife.min.js"></script>
+
+    <!-- 应用脚本 -->
+    <script src="/static/js/app.js?v=2.0.0"></script>
+</body>
+
+</html>

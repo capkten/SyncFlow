@@ -38,6 +38,9 @@ class GlobalConfig(BaseModel):
     database_path: str = './data/sync.db'
     web_host: str = '0.0.0.0'
     web_port: int = 8888
+    api_token: Optional[str] = None
+    ssh_host_key_policy: Literal['auto', 'reject', 'warning'] = 'reject'
+    ssh_known_hosts_path: str = './data/known_hosts'
 
 
 class AppConfig(BaseModel):

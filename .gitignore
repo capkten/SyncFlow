@@ -25,6 +25,8 @@ config.yaml
 data/
 logs/
 *.db
+data/secret.key
+data/known_hosts
 
 # 操作系统
 .DS_Store
