@@ -37,7 +37,7 @@ const app = createApp({
             logFilters: {
                 status: ''
             },
-            logsLimit: 200,
+            logsLimit: 50, // [优化] 从 200 降低到 50，减少内存占用
             wsConnected: {
                 logs: false,
                 status: false
@@ -112,8 +112,17 @@ const app = createApp({
                 backup_retention_days: 7
             },
             excludePatternsText: '',
+            excludePatternsText: '',
             refreshTimer: null,
-            resizeHandler: null
+            resizeHandler: null,
+
+            // [优化] 日志缓冲队列机制
+            logBuffer: [],
+            logFlushTimer: null,
+            logCleanupTimer: null, // [优化] 定期清理定时器
+            LOG_FLUSH_INTERVAL: 200, // 200ms 刷新一次
+            LOG_CLEANUP_INTERVAL: 60000, // 每分钟清理一次
+            LOG_CLEANUP_KEEP: 20 // 清理后保留最近 20 条
         };
     },
     computed: {
@@ -232,15 +241,32 @@ const app = createApp({
         this.$nextTick(() => {
             const loader = document.getElementById('app-loader');
             if (loader) {
-                // 延迟 800ms 以平滑过渡，并确保数据已填充
                 setTimeout(() => {
                     loader.classList.add('fade-out');
                     setTimeout(() => loader.remove(), 600);
                 }, 800);
             }
         });
+
+        // [优化] 启动日志缓冲刷新定时器
+        this.logFlushTimer = setInterval(this.flushLogBuffer, this.LOG_FLUSH_INTERVAL);
+
+        // [优化] 启动定期清理定时器（每分钟强制截断日志，释放内存）
+        this.logCleanupTimer = setInterval(() => {
+            if (this.logs.length > this.LOG_CLEANUP_KEEP) {
+                this.logs = this.logs.slice(0, this.LOG_CLEANUP_KEEP);
+            }
+            if (this.recentLogs.length > 5) {
+                this.recentLogs = this.recentLogs.slice(0, 5);
+            }
+            // 清空缓冲区中可能的积压
+            this.logBuffer = [];
+        }, this.LOG_CLEANUP_INTERVAL);
     },
     beforeUnmount() {
+        if (this.logFlushTimer) clearInterval(this.logFlushTimer);
+        if (this.logCleanupTimer) clearInterval(this.logCleanupTimer);
+        // ... 原有的清理逻辑
         if (this.refreshTimer) {
             clearInterval(this.refreshTimer);
         }
@@ -498,10 +524,38 @@ const app = createApp({
         },
         handleLogMessage(log) {
             if (!log) return;
-            this.recentLogs = [log, ...this.recentLogs].slice(0, 10);
-            if (this.selectedLogTaskId && log.task_id === this.selectedLogTaskId) {
-                this.logs = [log, ...this.logs].slice(0, this.logsLimit);
+            // 压入缓冲区，而不立即触发 Vue 更新
+            this.logBuffer.push(Object.freeze(log));
+        },
+        flushLogBuffer() {
+            if (this.logBuffer.length === 0) return;
+
+            // 取出所有缓冲的日志（清空缓冲区）
+            const newLogs = [...this.logBuffer]; // 保持时间正序 (旧 -> 新)
+            this.logBuffer = [];
+
+            // 倒序排列（新 -> 旧）用于 UI 显示
+            const newLogsReversed = newLogs.reverse();
+
+            // 1. 更新 Dashboard 的最近日志 (最近 5 条，降低内存)
+            this.recentLogs = [...newLogsReversed, ...this.recentLogs].slice(0, 5);
+
+            // 2. 更新具体任务的日志列表
+            if (this.selectedLogTaskId) {
+                // 过滤出当前选中任务的日志
+                const taskLogs = newLogsReversed.filter(l => l.task_id === this.selectedLogTaskId);
+                if (taskLogs.length > 0) {
+                    // 批量更新：追加到头部并截断
+                    // 这里我们还是得创建新数组触发 Reactivity，但频率低了很多
+                    const merged = [...taskLogs, ...this.logs];
+                    if (merged.length > this.logsLimit) {
+                        merged.length = this.logsLimit; // 高效截断
+                    }
+                    this.logs = merged;
+                }
             }
+
+            // 3. 触发一次统计更新
             this.loadLogStats();
         },
         handleStatusSnapshot(list) {
