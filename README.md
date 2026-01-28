@@ -1,165 +1,162 @@
-# 文件同步助手
+<div align="center">
+  <img src="icon.ico" alt="Tongbu Logo" width="120" height="120">
+  <h1>Tongbu Sync (同步助手)</h1>
+  
+  <p>
+    <strong>A Modern, Real-time Bidirectional File Synchronization Tool</strong><br>
+    现代化、实时的文件双向同步工具
+  </p>
 
-一个轻量级的跨平台文件同步工具，支持 Windows 和 Linux 之间的实时文件同步。
+  <p>
+    <a href="#english">English</a> • <a href="#chinese">中文</a>
+  </p>
 
-## ✨ 主要功能
+  <img src="https://img.shields.io/badge/Python-3.10+-3776AB?style=flat-square&logo=python&logoColor=white" />
+  <img src="https://img.shields.io/badge/Vue.js-3.x-4FC08D?style=flat-square&logo=vue.js&logoColor=white" />
+  <img src="https://img.shields.io/badge/FastAPI-0.109+-009688?style=flat-square&logo=fastapi&logoColor=white" />
+  <img src="https://img.shields.io/badge/Platform-Windows%20%7C%20Linux-lightgrey?style=flat-square" />
+  <br><br>
+</div>
 
-- 🔄 **实时监控**：基于 watchdog 实现文件系统事件监控
-- 🌐 **多种传输方式**：支持本地同步和 SSH 远程同步
-- 📝 **换行符统一**：自动处理 Windows/Linux 换行符差异（CRLF ↔ LF）
-- 🎯 **智能过滤**：支持排除规则和文件扩展名过滤
-- 🖥️ **Web 管理界面**：提供友好的任务管理和日志查看界面
-- 📊 **实时日志**：WebSocket 实时推送同步状态
+<hr>
 
-## 🚀 快速开始
+<a name="english"></a>
+## 🇬🇧 English Introduction
 
-### 1. 安装依赖
+**Tongbu Sync** is a powerful file synchronization tool designed for seamless developer workflows. While supporting standard local-to-local synchronization, its core strength lies in **Local-to-Remote (SSH/SFTP)** synchronization with real-time capabilities.
 
-```bash
-# 创建虚拟环境（推荐）
-python -m venv venv
-source venv/bin/activate  # Linux
-# 或
-venv\Scripts\activate     # Windows
+Unlike traditional tools that rely heavily on slow polling, Tongbu Sync integrates **Remote Inotify** support. It runs a lightweight listener on your remote Linux server to push file change events instantly, ensuring your local and remote environments are always in sync with millisecond latency.
 
-# 安装依赖
-pip install -r requirements.txt
-```
+### ✨ Key Features
 
-### 2. 配置同步任务
-
-复制配置示例文件：
-```bash
-cp config.example.yaml config.yaml
-```
-
-编辑 `config.yaml`，配置您的同步任务：
-
-```yaml
-global:
-  log_level: INFO
-  web_port: 8888
-  api_token: "change-me"        # 可选：启用 API 认证
-  ssh_host_key_policy: "reject" # auto/reject/warning
-  ssh_known_hosts_path: "./data/known_hosts"
-
-sync_tasks:
-  - name: "我的项目同步"
-    source_path: "D:/projects/my-app"
-    target:
-      type: "ssh"
-      host: "192.168.1.100"
-      port: 22
-      username: "user"
-      password: "your_password"
-      path: "/home/user/my-app"
-    enabled: true
-    auto_start: true
-    eol_normalize: "lf"         # 统一为 LF 换行符
-    exclude_patterns:
-      - "*.pyc"
-      - "__pycache__"
-      - ".git"
-      - "node_modules"
-```
-
-### 3. 启动服务
-
-```bash
-python backend/app.py
-```
-
-### 4. 访问 Web 界面
-
-打开浏览器访问：`http://localhost:8888`
-
-## 📖 核心特性说明
-
-### 换行符统一处理 ⭐
-
-本工具的一大特色是自动处理 Windows 和 Linux 之间的换行符差异：
-
-- **问题**：Windows 使用 CRLF (`\r\n`)，Linux 使用 LF (`\n`)，导致 Git 频繁报告文件修改
-- **解决**：同步前自动统一换行符，支持三种模式：
-  - `lf`：统一为 Unix 风格（推荐）
-  - `crlf`：统一为 Windows 风格
-  - `keep`：保持原样不处理
-
-### 多文件夹同步
-
-支持配置多个独立的同步任务，每个任务可以：
-- 设置不同的源目录和目标目录
-- 使用不同的传输方式（本地/SSH）
-- 配置不同的排除规则和换行符策略
-
-### 智能排除规则
-
-支持 glob 模式的排除规则：
-```yaml
-exclude_patterns:
-  - "*.pyc"           # 排除所有 .pyc 文件
-  - "__pycache__"     # 排除 __pycache__ 目录
-  - ".git"            # 排除 .git 目录
-  - "*.log"           # 排除日志文件
-```
-
-### WebSocket 实时推送 ⭐
-
-- `ws://<host>/ws/logs`：实时日志推送
-- `ws://<host>/ws/task-status`：任务状态推送
-- 若启用 `api_token`，需在请求头 `Authorization: Bearer <token>` 或 WS 查询参数 `?token=<token>`
-
-## 🛠️ 技术栈
-
-- **后端**：Python + FastAPI
-- **文件监控**：watchdog
-- **SSH 传输**：paramiko
-- **数据库**：SQLite + SQLAlchemy
-- **前端**：Vue.js 3 + Element Plus
-- **日志**：loguru
-
-## 📂 项目结构
-
-```
-文件同步助手/
-├── backend/                # 后端服务
-│   ├── app.py             # 主应用入口
-│   ├── config/            # 配置模块
-│   ├── core/              # 核心功能
-│   │   ├── eol_normalizer.py  # 换行符处理 ⭐
-│   │   ├── file_watcher.py    # 文件监控
-│   │   └── sync_engine.py     # 同步引擎
-│   ├── api/               # API 路由
-│   └── utils/             # 工具函数
-├── frontend/              # Web 前端界面
-├── config.yaml            # 用户配置
-└── requirements.txt       # Python 依赖
-```
-
-## 📝 开发进度
-
-- [x] 换行符统一处理模块
-- [x] 文件工具函数
-- [x] 配置管理
-- [x] 日志系统
-- [ ] 文件监控（watchdog）
-- [ ] 本地同步引擎
-- [ ] SSH 远程传输
-- [ ] FastAPI 后端 API
-- [ ] Vue.js 前端界面
-- [ ] WebSocket 实时日志
-
-## ⚠️ 注意事项
-
-1. **首次使用**：建议先在测试目录验证功能
-2. **SSH 认证**：可使用密码或 SSH 密钥（密钥更安全）
-3. **大文件同步**：首次同步大量文件可能需要较长时间
-4. **网络要求**：SSH 模式需要目标主机开启 SSH 服务（端口22）
-
-## 📄 许可证
-
-MIT License
+*   **🔄 Bidirectional & One-way Sync**: Flexible synchronization modes to fit your workflow.
+*   **⚡ Real-time Detection**:
+    *   **Local**: Uses `watchdog` to monitor file system events.
+    *   **Remote**: Uses `inotifywait` (via SSH) for instant updates on Linux servers.
+    *   **Smart Polling**: Automatic fallback to optimized polling (1.5s interval) if inotify is unavailable.
+*   **🚀 High Performance**:
+    *   **Batch Processing**: Aggregates rapid file changes to prevent sync storms.
+    *   **Concurrent Sync**: Multi-threaded transfer engine handles multiple files simultaneously.
+*   **🖥️ Modern Desktop App**:
+    *   Packaged as a native **Windows application** (no Python installation required).
+    *   **System Tray** support for background running.
+    *   Beautiful, responsive user interface built with **Vue 3** and **Element Plus**.
+*   **🛡️ Robustness**:
+    *   Trash can & Backup support.
+    *   Intelligent conflict resolution.
+    *   Automatic network reconnection.
 
 ---
 
-**文件同步助手** - 让跨平台开发更轻松 🚀
+### 📥 Usage
+
+#### Method 1: Desktop Application (Recommended for Windows)
+1. Download the latest release package.
+2. Unzip and run `TongbuSync.exe`.
+3. The app will minimize to the system tray. Click the tray icon to open the UI.
+
+#### Method 2: Running from Source
+1. **Prerequisites**: Python 3.10+, Node.js (optional, for frontend dev).
+2. **Install Dependencies**:
+   ```bash
+   pip install -r requirements.txt
+   ```
+3. **Run the GUI**:
+   ```bash
+   python gui_app.py
+   ```
+   Or run the backend server only (Headless mode):
+   ```bash
+   python backend/app.py
+   ```
+
+### 🔨 Building from Source
+To package the application into a standalone `.exe` file:
+```bash
+pip install pyinstaller pywebview pystray Pillow
+python -m PyInstaller --clean -y TongbuSync.spec
+```
+The output file will be in `dist/TongbuSync/`.
+
+### 🐧 Remote Server Setup (Optional)
+For the best experience, install `inotify-tools` on your remote Linux server to enable real-time pushing:
+*   **Ubuntu/Debian**: `sudo apt-get install inotify-tools`
+*   **CentOS/RHEL**: `sudo yum install inotify-tools`
+
+---
+
+<br>
+<hr>
+<br>
+
+<a name="chinese"></a>
+## 🇨🇳 中文介绍
+
+**Tongbu Sync (同步助手)** 是一款专为开发者打造的现代化文件同步工具。它不仅支持本地文件夹之间的同步，更专注于高效的 **本地 <-> 远程 (SSH/SFTP)** 开发场景。
+
+与传统依赖低效轮询的工具不同，Tongbu Sync 实现了 **远程 Inotify 集成**。它通过 SSH 在远程 Linux 服务器上运行轻量级监听器，实时推送文件变更事件，实现了毫秒级的双向同步体验。
+
+### ✨ 核心特性
+
+*   **🔄 双向与单向同步**: 支持镜像备份或双向实时协作模式。
+*   **⚡ 极致实时性**:
+    *   **本地监控**: 基于 `watchdog` 系统级文件监控。
+    *   **远程监控**: 优先使用 `inotifywait` (SSH) 实时捕获远程变更。
+    *   **智能兜底**: 若远程不支持 inotify，自动降级为高频轮询（1.5秒间隔，同步时自动避让）。
+*   **🚀 高性能引擎**:
+    *   **批量处理**: 智能合并短时间内的多次修改，避免重复同步。
+    *   **并发传输**: 多线程传输引擎，海量小文件同步更迅速。
+*   **🖥️ 原生桌面体验**:
+    *   提供独立的 **Windows 桌面应用** (无需安装 Python)。
+    *   支持 **系统托盘** 最小化，后台静默运行。
+    *   基于 **Vue 3 + Element Plus** 的现代化管理界面。
+*   **🛡️ 安全可靠**:
+    *   支持回收站和版本备份，防止误删。
+    *   断网自动重连与错误重试机制。
+
+---
+
+### 📥 使用指南
+
+#### 方式一：直接运行桌面版 (Windows 推荐)
+1. 下载最新发布的压缩包。
+2. 解压后直接双击运行 `TongbuSync.exe`。
+3. 程序启动后会显示 Loading 动画，并在系统托盘显示图标。
+
+#### 方式二：源码运行
+1. **环境准备**: Python 3.10+。
+2. **安装依赖**:
+   ```bash
+   pip install -r requirements.txt
+   ```
+3. **启动应用**:
+   ```bash
+   # 启动桌面版 (带独立窗口)
+   python gui_app.py
+   
+   # 或仅启动 Web 后端 (浏览器访问 http://localhost:8888)
+   python backend/app.py
+   ```
+
+### 🔨 打包构建
+如果您想自己构建 Windows 可执行文件：
+```bash
+# 安装打包工具
+pip install pyinstaller pywebview pystray Pillow
+
+# 执行打包
+python -m PyInstaller --clean -y TongbuSync.spec
+```
+构建完成后，可执行文件位于 `dist/TongbuSync/` 目录下。
+
+### 🐧 远程服务器配置 (可选)
+为了获得最佳的远程同步体验，建议在您的 Linux 服务器上安装 `inotify-tools`：
+*   **Ubuntu/Debian**: `sudo apt-get install inotify-tools`
+*   **CentOS/RHEL**: `sudo yum install inotify-tools`
+*   如果未安装，软件会自动回退到轮询模式，依然可用，但延迟稍高 (约 1-2 秒)。
+
+---
+
+## 📜 License
+
+This project is licensed under the MIT License.
