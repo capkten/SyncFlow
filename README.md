@@ -160,3 +160,4 @@ python -m PyInstaller --clean -y TongbuSync.spec
 ## 📜 License
 
 This project is licensed under the MIT License.
+
